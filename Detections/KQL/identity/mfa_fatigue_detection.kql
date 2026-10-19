@@ -1,0 +1,61 @@
+// MFA fatigue: repeated MFA failures (500121) followed by a successful
+// sign-in from one of the same IPs that generated the failures.
+let mfaThreshold = 5;
+let maxGapAfterLastFailure = 10m;
+let MfaFailures = SigninLogs
+| where ResultType == "500121"          // failed strong-authentication step (denied / no response)
+| extend
+    Upn = tolower(UserPrincipalName),
+    MfaDetail = tostring(Status.additionalDetails)
+| summarize
+    MfaFailureCount = count(),
+    FirstFailure = min(TimeGenerated),
+    LastFailure = max(TimeGenerated),
+    FailureIPs = make_set(IPAddress, 50),
+    FailureDetails = make_set(MfaDetail, 10),
+    Upn = take_any(Upn)
+    by UserId
+| where MfaFailureCount >= mfaThreshold;
+let Successes = SigninLogs
+| where ResultType == "0"
+| extend IsAnonymousIP =
+    tostring(RiskEventTypes_V2) has "anonymizedIPAddress"
+    or tostring(RiskEventTypes) has "anonymizedIPAddress"
+| project
+    UserId,
+    SuccessTime = TimeGenerated,
+    SuccessIP = IPAddress,
+    AppDisplayName,
+    ClientAppUsed,
+    Location,
+    IsAnonymousIP,
+    RiskLevelDuringSignIn,
+    RiskEventTypes_V2,
+    CorrelationId;
+MfaFailures
+| join kind=inner Successes on UserId
+| project-away UserId1
+| where SuccessTime > FirstFailure
+| where SuccessTime <= LastFailure + maxGapAfterLastFailure
+| where set_has_element(FailureIPs, SuccessIP)
+| summarize arg_min(SuccessTime, *) by UserId
+| extend
+    TimeToCompromiseMinutes = datetime_diff('minute', SuccessTime, FirstFailure)
+| project
+    TimeGenerated = SuccessTime,
+    UserId,
+    UserPrincipalName = Upn,
+    MfaFailureCount,
+    FailureDetails,
+    FirstFailure,
+    LastFailure,
+    SuccessIP,
+    FailureIPs,
+    Location,
+    AppDisplayName,
+    ClientAppUsed,
+    IsAnonymousIP,
+    RiskLevelDuringSignIn,
+    RiskEventTypes_V2,
+    TimeToCompromiseMinutes,
+    CorrelationId
