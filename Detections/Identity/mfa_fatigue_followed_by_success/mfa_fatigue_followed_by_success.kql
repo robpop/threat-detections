@@ -1,0 +1,66 @@
+// Author: Robert Popeleski
+// MFA fatigue: 5+ MFA failures (500121) from one IP, followed by a successful
+// MFA-satisfied sign-in from the same IP shortly after the last failure.
+let mfaThreshold = 5;                       // failures required BEFORE the success
+let failureLookback = 20m;                  // only count failures this long before the success
+let maxGapAfterLastFailure = 10m;           // success must follow the last failure within this gap
+let Failures = SigninLogs
+| where ResultType == "500121"              // failed strong-authentication step (denied / no response)
+| project
+    UserId,
+    IPAddress,
+    FailureTime = TimeGenerated,
+    MfaDetail = tostring(Status.additionalDetails);
+let Successes = SigninLogs
+| where ResultType == "0"                                                           // successful sign-ins only
+| where AuthenticationRequirement == "multiFactorAuthentication"                    // the success satisfied MFA (the user approved a prompt)
+| where tostring(Status.additionalDetails) !has "satisfied by claim in the token"   // exclude MFA satisfied by existing token
+| extend IsAnonymousIP =
+    tostring(RiskEventTypes_V2) has "anonymizedIPAddress"
+    or tostring(RiskEventTypes) has "anonymizedIPAddress"
+| project
+    UserId,
+    IPAddress,
+    SuccessTime = TimeGenerated,
+    Upn = tolower(UserPrincipalName),
+    AppDisplayName,
+    ClientAppUsed,
+    Location,
+    IsAnonymousIP,
+    RiskLevelDuringSignIn,
+    RiskEventTypes_V2,
+    CorrelationId;
+Successes
+| join kind=inner Failures on UserId, IPAddress                     // same user AND same IP
+| project-away UserId1, IPAddress1
+| where FailureTime < SuccessTime                                   // only failures BEFORE the success
+    and FailureTime >= SuccessTime - failureLookback
+| summarize
+    MfaFailureCount = count(),
+    FirstFailure = min(FailureTime),
+    LastFailure = max(FailureTime),
+    FailureDetails = make_set(MfaDetail, 10),
+    take_any(Upn, AppDisplayName, ClientAppUsed, Location, IsAnonymousIP,
+             RiskLevelDuringSignIn, RiskEventTypes_V2, CorrelationId)
+    by UserId, IPAddress, SuccessTime
+| where MfaFailureCount >= mfaThreshold                             // threshold met before the success
+| where SuccessTime - LastFailure <= maxGapAfterLastFailure         // success came soon after the failures
+| summarize arg_min(SuccessTime, *) by UserId, IPAddress            // one alert per user and IP: the first qualifying success
+| extend TimeToCompromiseMinutes = datetime_diff('minute', SuccessTime, FirstFailure)
+| project
+    TimeGenerated = SuccessTime,
+    UserId,
+    UserPrincipalName = Upn,
+    SuccessIP = IPAddress,
+    MfaFailureCount,
+    FailureDetails,
+    FirstFailure,
+    LastFailure,
+    Location,
+    AppDisplayName,
+    ClientAppUsed,
+    IsAnonymousIP,
+    RiskLevelDuringSignIn,
+    RiskEventTypes_V2,
+    TimeToCompromiseMinutes,
+    CorrelationId

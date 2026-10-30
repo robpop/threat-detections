@@ -1,0 +1,92 @@
+# Author: Robert Popeleski
+# MFA fatigue followed by a successful sign-in
+#
+title: EntraID MFA Failure
+id: 0920b76e-1c83-48b2-8089-999fb1e68dd8
+name: mfa_failure
+status: test
+description: A failed MFA attempt
+author: Robert Popeleski
+date: 2026-10-22
+tags:
+    - attack.credential-access
+    - attack.t1621
+logsource:
+    product: azure
+    service: signinlogs
+detection:
+    selection:
+        ResultType: 500121
+    condition: selection
+falsepositives:
+    - Users who miss or decline MFA prompts themselves while signing in
+level: informational
+---
+title: Repeated MFA Failures for a User
+id: a46022af-5198-45f1-b51d-90a301f41b62
+name: repeated_mfa_failure
+status: test
+description: Detects 5 or more MFA failures for the same user and IP within 10 minutes
+author: Robert Popeleski
+date: 2026-10-22
+tags:
+    - attack.credential-access
+    - attack.t1621
+correlation:
+    type: event_count
+    rules:
+        - mfa_failure
+    group-by:
+        - UserPrincipalName
+        - IPAddress
+    timespan: 10m
+    condition:
+        gte: 5
+falsepositives:
+    - Users having issues signing in
+level: medium
+---
+title: Successful Sign-In
+id: b9f95121-ac0a-4cb5-bb15-2d97336dbedd
+name: successful_signin
+status: test
+description: A successful sign-in was performed
+author: Robert Popeleski
+date: 2026-10-22
+logsource:
+    product: azure
+    service: signinlogs
+detection:
+    selection:
+        ResultType: 0
+        AuthenticationRequirement: 'multiFactorAuthentication'
+    filter_prior_mfa:
+        Status|contains: 'satisfied by claim in the token'
+    condition: selection and not filter_prior_mfa
+level: informational
+---
+title: MFA Fatigue Followed by Successful Sign-In
+id: e58e05a2-55a8-4461-89d2-232ead862fb2
+status: test
+description: Detects 5 or more MFA failures for a user from one IP, followed by a successful sign-in from the same IP, indicating a likely MFA fatigue compromise 
+author: Robert Popeleski
+date: 2026-10-22
+references:
+    - https://attack.mitre.org/techniques/T1621/
+tags:
+    - attack.credential-access              # Tactic for the MFA prompt flooding
+    - attack.t1621                          # Technique: MFA Request Generation
+    - attack.initial-access                 # Tactic for the successful login
+    - attack.t1078.004                      # Technique: Valid Accounts, Cloud Accounts
+correlation:
+    type: temporal_ordered
+    rules:
+        - repeated_mfa_failure
+        - successful_signin
+    group-by:
+        - UserPrincipalName
+        - IPAddress
+    timespan: 20m
+falsepositives:
+    - Users who fail MFA multiple times due to device issues, then succeed from their usual network
+level: medium

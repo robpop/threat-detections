@@ -1,0 +1,16 @@
+<group name="sigma,windows,iis,whoami">
+    <rule id="100200" level="10">
+        <!-- Status: experimental -->
+        <!-- Sigma ID: 48a95769-6bd8-4e66-a82f-f4a390d86ce2 -->
+        <if_sid>61603</if_sid>
+        <field name="win.eventdata.image" type="pcre2">(?i)(?:\\+whoami\.exe)$</field>
+        <field name="win.eventdata.parentImage" type="pcre2">(?i)(?:\\+w3wp\.exe)$</field>
+        <description>Whoami ran by IIS worker</description>
+        <options>no_full_log</options>
+        <group>windows,process_creation,</group>
+        <mitre>
+            <id>T1033</id>
+            <id>T1505.003</id>
+        </mitre>
+    </rule>
+</group>

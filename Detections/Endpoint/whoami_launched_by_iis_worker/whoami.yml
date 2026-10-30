@@ -1,0 +1,22 @@
+#
+# Detection for whoami.exe launched by an IIS worker process (w3wp.exe)
+# w3wp.exe handles web requests (HTTP, HTTPS, FTP) for an IIS app
+#
+title: Whoami ran by IIS worker
+id: 48a95769-6bd8-4e66-a82f-f4a390d86ce2
+status: experimental
+logsource:
+    product: windows
+    category: process_creation
+detection:
+    selection_exe:
+        Image|endswith: '\whoami.exe'
+    selection_iis:
+        ParentImage|endswith: '\w3wp.exe'
+    condition: selection_exe and selection_iis
+falsepositives:
+    - Unknown
+level: medium
+tags:
+    - attack.t1033
+    - attack.t1505.003

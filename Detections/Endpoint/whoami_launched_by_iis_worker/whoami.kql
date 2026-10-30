@@ -1,0 +1,2 @@
+SecurityEvent
+| where NewProcessName endswith "\\whoami.exe" and ParentProcessName endswith "\\w3wp.exe"
