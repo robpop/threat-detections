@@ -4,7 +4,7 @@ Detects a likely account compromise in Microsoft Entra ID: a burst of failed or 
 
 | | |
 | --- | --- |
-| **Rules** | [KQL](./mfa_fatigue_followed_by_success_v2.kql) (Defender XDR / Sentinel) · [Sigma](./mfa_fatigue_followed_by_success.yml) (v2 correlation) · [Wazuh](./mfa_fatigue_followed_by_success.xml) |
+| **Rules** | [KQL](./mfa_fatigue_followed_by_success.kql) (Defender XDR / Sentinel) · [Sigma](./mfa_fatigue_followed_by_success.yml) (v2 correlation) · [Wazuh](./mfa_fatigue_followed_by_success.xml) |
 | **Data source** | Entra ID interactive sign-in logs (`SigninLogs`) |
 | **Severity** | Medium |
 | **MITRE ATT&CK** | [T1621](https://attack.mitre.org/techniques/T1621/) MFA Request Generation · [T1078.004](https://attack.mitre.org/techniques/T1078/004/) Valid Accounts: Cloud Accounts |
