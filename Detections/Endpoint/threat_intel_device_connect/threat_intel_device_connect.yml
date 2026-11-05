@@ -1,0 +1,45 @@
+#
+# Read IOCs from Azure Monitor Logs table ThreatIntelIndicators
+# and detect where RemoteUrl and RemoteIP match any of those IOCs
+# in DeviceNetworkEvents and DeviceEvents
+#
+# DeviceNetworkEvents rule, can use network_connection category
+title: Network Connection to Threat Intel Indicator
+id: ea24a24e-f3d3-4972-8bda-a5eff8845a96
+status: experimental
+description: Detects device network connections to an active threat intel indicator (IP or hostname).
+author: Rob Popeleski
+date: 2026-11-05
+logsource:
+  category: network_connection
+  product: windows
+detection:
+  selection_ip:
+    # |expand means %ThreatIntelIOCs% is a placeholder, filled in by threat_intel_pipeline.yml for use with Defender
+    DestinationIp|expand: '%ThreatIntelIOCs%'               # becomes RemoteIP
+  selection_host:
+    DestinationHostname|expand: '%ThreatIntelIOCs%'         # becomes RemoteUrl
+  condition: 1 of selection_*                               # match IP or hostname
+falsepositives:
+  - Indicators that are shared infrastructure (CDNs, cloud providers, sinkholes)
+level: medium
+---
+# DeviceEvents rule, has no Sigma category for conversion, use custom deviceevents service
+title: Device Event to Threat Intel Indicator
+id: 0302dde7-bc15-40f0-94c7-63307b00abc5
+status: experimental
+description: Detects Defender DeviceEvents (SmartScreen, network protection) with a remote IP or URL on an active threat intel indicator.
+author: Rob Popeleski
+date: 2026-11-05
+logsource:
+  product: windows
+  service: deviceevents                                     # not in SigmaHQ, threat_intel_pipeline.yml maps it to DeviceEvents
+detection:
+  selection_ip:
+    RemoteIP|expand: '%ThreatIntelIOCs%'                    # native Defender field names
+  selection_url:
+    RemoteUrl|expand: '%ThreatIntelIOCs%'
+  condition: 1 of selection_*                               # IP or URL match
+falsepositives:
+  - Indicators that are shared infrastructure (CDNs, cloud providers, sinkholes)
+level: medium

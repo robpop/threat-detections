@@ -1,0 +1,33 @@
+# pySigma pipeline for threat_intel_device_connect.yml (-p microsoft_xdr)
+name: threat_intel_pipeline
+priority: 5                               # lower runs first, must run before microsoft_xdr (10)
+transformations:
+  - id: deviceevents_table
+    type: set_state
+    key: query_table                      # Kusto backend uses this as the table name
+    val: DeviceEvents                     # the table name in Defender XDR
+    rule_conditions:                      # define for service deviceevents
+      - type: logsource
+        product: windows
+        service: deviceevents
+  - id: ti_ioc_lookup
+    type: query_expression_placeholders   # the transformation for replacing |expand placeholders
+    # field is the field on whichever line has the placeholder i.e., DestinationIp and DestinationHostname
+    # DestinationIp will become RemoteIP (Defender XDR) during transformation etc...
+    # id is the placeholder name i.e., ThreatIntelIOCs
+    # e.g., %ThreatIntelIOCs% becomes RemoteIP in~ (ThreatIntelIOCs)
+    expression: "{field} in~ ({id})"
+finalizers:                               # run at the end, after all pipelines
+  - type: template                        # template text is copied into the output
+    # Inserts the let block before each query (DeviceEvents and DeviceNetworkEvents queries) since Sigma can't write a union
+    template: |
+      {% for query in queries %}
+      let ThreatIntelIOCs = ThreatIntelIndicators
+          | summarize arg_max(TimeGenerated, *) by Id
+          | where IsActive == true
+          | extend IOC = trim_end("/", replace_regex(tolower(ObservableValue), @"^[a-z]+://", ""))
+          | where isnotempty(IOC)
+          | distinct IOC;
+      {{ query }}
+
+      {% endfor %}

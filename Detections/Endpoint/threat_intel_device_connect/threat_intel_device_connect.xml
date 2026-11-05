@@ -1,0 +1,28 @@
+<group name="sigma,">
+    <!-- Author: Rob Popeleski -->
+    <!-- Date: 2026-11-05 -->
+    <rule id="100900" level="10">
+        <!-- Description: Detects device network connections to an active threat intel indicator (IP). -->
+        <if_sid>61605</if_sid>  <!-- Sysmon Event ID 3: network connection -->
+        <!-- address_match_key is required for IP fields -->
+        <list field="win.eventdata.destinationIp" lookup="address_match_key">etc/lists/threat-intel-ips</list>
+        <description>Network Connection to Threat Intel Indicator: $(win.eventdata.destinationIp)</description>
+        <mitre>
+            <id>T1071</id>
+        </mitre>
+        <options>no_full_log</options>
+        <group>windows,network_connection,</group>
+    </rule>
+
+    <rule id="100901" level="10">
+        <!-- Description: Detects device network connections to an active threat intel indicator (hostname). -->
+        <if_sid>61605</if_sid>  <!-- Sysmon Event ID 3: network connection -->
+        <list field="win.eventdata.destinationHostname" lookup="match_key">etc/lists/threat-intel-domains</list>
+        <description>Network Connection to Threat Intel Indicator: $(win.eventdata.destinationHostname)</description>
+        <mitre>
+            <id>T1071</id>
+        </mitre>
+        <options>no_full_log</options>
+        <group>windows,network_connection,</group>
+    </rule>
+</group>

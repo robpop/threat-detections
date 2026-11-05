@@ -1,0 +1,11 @@
+// get all active IOCs from ThreatIntelIndicators, normalized with regex
+let ThreatIntelIOCs = ThreatIntelIndicators
+    | summarize arg_max(TimeGenerated, *) by Id
+    | where IsActive == true
+    | extend IOC = trim_end("/", replace_regex(tolower(ObservableValue), @"^[a-z]+://", ""))
+    | distinct IOC;
+// where any threat intel IOCs in DeviceNetworkEvents and DeviceEvents
+union DeviceNetworkEvents, DeviceEvents
+| extend UrlNorm = trim_end("/", replace_regex(tolower(RemoteUrl), @"^[a-z]+://", ""))
+| where (UrlNorm in (ThreatIntelIOCs) and isnotempty(UrlNorm))
+    or (RemoteIP in~ (ThreatIntelIOCs) and isnotempty(RemoteIP))
