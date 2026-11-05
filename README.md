@@ -1,2 +1,2 @@
 # threat-detections
-KQL and Sigma threat detections
+KQL, Sigma, and Wazuh XML threat detections
