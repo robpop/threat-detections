@@ -1,0 +1,13 @@
+// A LOLBAS binary was observed accessing sensitive browser data. 
+// The binary was likely hollowed out as this behavior is anomalous. 
+// Potential indicator of InfoStealer activity.
+DeviceEvents
+// ensure that this ActionType is valid for your environment
+| where ActionType == "SensitiveFileRead"
+// list of LOLBAS binaries that would not normally access browser data
+| where tolower(InitiatingProcessFileName) in ("regasm.exe", "regsvcs.exe", "msbuild.exe", "installutil.exe", "applaunch.exe", "vbc.exe", "aspnet_compiler.exe", "addinprocess32.exe") or tolower(InitiatingProcessVersionInfoOriginalFileName) in ("regasm.exe", "regsvcs.exe", "msbuild.exe", "installutil.exe", "applaunch.exe", "vbc.exe", "aspnet_compiler.exe", "addinprocess32.exe")
+| extend FilePath = tostring(parse_json(AdditionalFields).FileName.PropertyValue)
+// where the accessed file path is sensitive browser data
+| where FilePath has @"\Google\Chrome\User Data\" or FilePath has @"\Microsoft\Edge\User Data\" or FilePath has @"\BraveSoftware\Brave-Browser\User Data\" or FilePath has @"\Opera Software\" or FilePath has @"\Mozilla\Firefox\Profiles\"
+| where FilePath has "Login Data" or FilePath has "Web Data" or FilePath has "Cookies" or FilePath has "Local State" or FilePath has "key4.db" or FilePath has "logins.json" or FilePath has "cookies.sqlite" or FilePath has "formhistory.sqlite"
+| project Timestamp, ReportId, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessAccountSid, InitiatingProcessFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessFolderPath, InitiatingProcessCommandLine, InitiatingProcessSHA256, InitiatingProcessParentFileName, FilePath

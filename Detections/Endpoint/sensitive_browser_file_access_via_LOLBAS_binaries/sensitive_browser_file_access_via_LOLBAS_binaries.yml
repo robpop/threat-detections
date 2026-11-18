@@ -1,0 +1,73 @@
+title: Sensitive Browser File Access via LOLBAS Binaries
+id: c6c3303d-2f75-488f-a52e-61bbb6373ce3
+status: experimental
+description: |
+    Detects a signed Microsoft .NET Framework binary commonly used as a process hollowing host (RegAsm, RegSvcs, MSBuild, InstallUtil, AppLaunch, vbc, aspnet_compiler, AddInProcess32) reading browser credential, cookie, or encryption key files.
+    These binaries have no legitimate reason to access browser profiles, so this behavior strongly suggests the process was hollowed and is running an infostealer payload such as Agent Tesla, RedLine, Lumma, or Vidar.
+references:
+    - https://attack.mitre.org/techniques/T1055/012/
+    - https://attack.mitre.org/techniques/T1555/003/
+    - https://lolbas-project.github.io/lolbas/Binaries/Regasm/
+    - https://lolbas-project.github.io/lolbas/Binaries/Msbuild/
+author: Robert Popeleski
+date: 2026-11-18
+tags:
+    - attack.credential-access
+    - attack.t1555.003
+    - attack.t1539
+    - attack.defense-evasion
+    - attack.t1055.012
+    - attack.t1218.009
+    - attack.t1127.001
+logsource:
+    category: file_access
+    product: windows
+detection:
+    # either Image or OriginalFileName checks need to match (Sigma lists are treated as OR)
+    selection_img:
+        # check for the LOLBAS file name and location - the attacker hollows the binary in its original location
+        - Image|endswith:
+              - '\regasm.exe'
+              - '\regsvcs.exe'
+              - '\msbuild.exe'
+              - '\installutil.exe'
+              - '\applaunch.exe'
+              - '\vbc.exe'
+              - '\aspnet_compiler.exe'
+              - '\addinprocess32.exe'
+        # version information included in the binary - detects renaming for detection evasion
+        - OriginalFileName|endswith:
+              - 'regasm.exe'
+              - 'regsvcs.exe'
+              - 'msbuild.exe'
+              - 'installutil.exe'
+              - 'applaunch.exe'
+              - 'vbc.exe'
+              - 'aspnet_compiler.exe'
+              - 'addinprocess32.exe'
+    selection_browser_paths:
+        # the browser paths we are interested in monitoring for access
+        FileName|contains:
+            - '\Google\Chrome\User Data\'
+            - '\Microsoft\Edge\User Data\'
+            - '\BraveSoftware\Brave-Browser\User Data\'
+            - '\Opera Software\'
+            - '\Mozilla\Firefox\Profiles\'
+    selection_browser_files:
+        # the files that would be anomalous for the binaries above to access
+        FileName|contains:
+            - 'Login Data'
+            - 'Web Data'
+            - 'Cookies'
+            - 'Local State'
+            - 'key4.db'
+            - 'logins.json'
+            - 'cookies.sqlite'
+            - 'formhistory.sqlite'
+    # all three of these conditions must be met
+    condition: all of selection_*
+falsepositives:
+    - Malware analysis sandboxes and detonation labs
+    - Red team or penetration testing activity that runs tooling through these binaries
+    - In-house build or test automation run through MSBuild that deliberately reads a browser profile
+level: high
