@@ -1,0 +1,48 @@
+# MSBuild.exe is a Microsoft tool that developers use to turn source code into programs and applications.
+# Attackers can misuse MSBuild.exe to perform other actions, like reading
+# sensitive files. This test makes MSBuild.exe read a browser file without
+# displaying, copying, or sending the data anywhere.
+# This does not steal credentials or use process hollowing.
+attack_technique: T1555.003
+display_name: 'Credentials from Password Stores: Credentials from Web Browsers'
+atomic_tests:
+  - name: MSBuild reads Chrome or Edge Local State
+    description: |
+      Uses MSBuild.exe to read an existing browser Local State file.
+      The contents are not displayed, saved, or sent anywhere.
+    supported_platforms: [windows]
+    executor:
+      name: powershell
+      elevation_required: false
+      command: |
+        # Choose an existing Chrome or Edge file - this test does not modify data.
+        $file = @(
+          "$env:LOCALAPPDATA\Google\Chrome\User Data\Local State",
+          "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Local State"
+        ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+        if (-not $file) { throw 'Chrome or Edge Local State was not found.' }
+
+        # Expose the file path to MSBuild as an environment variable.
+        $env:ART_BROWSER_FILE = $file
+
+        # MSBuild reads the file internally; it does not print the contents.
+        # ReadLinesFromFile is a MSBuild task used to read text files
+        $project = Join-Path $env:TEMP 'T1555.003-browser-read.proj'
+        @'
+        <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+          <Target Name="Read">
+            <ReadLinesFromFile File="$(ART_BROWSER_FILE)" />
+            <Message Text="MSBuild file read completed." Importance="high" />
+          </Target>
+        </Project>
+        '@ | Set-Content -LiteralPath $project -Encoding UTF8
+
+        # Launch the Windows .NET Framework executable MSBuild.exe.
+        # /t:Read execute the XML Target with name "Read"
+        $msbuild = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\MSBuild.exe'
+        if (-not (Test-Path -LiteralPath $msbuild)) { throw 'MSBuild.exe was not found.' }
+        & $msbuild $project /t:Read /nologo /v:minimal
+        if ($LASTEXITCODE -ne 0) { throw "MSBuild failed: $LASTEXITCODE" }
+      cleanup_command: |
+        # Remove only our temporary project; leave browser data untouched.
+        Remove-Item (Join-Path $env:TEMP 'T1555.003-browser-read.proj') -Force -ErrorAction SilentlyContinue
