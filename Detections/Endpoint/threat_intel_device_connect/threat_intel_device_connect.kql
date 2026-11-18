@@ -2,10 +2,18 @@
 let ThreatIntelIOCs = ThreatIntelIndicators
     | summarize arg_max(TimeGenerated, *) by Id
     | where IsActive == true
-    | extend IOC = trim_end("/", replace_regex(tolower(ObservableValue), @"^[a-z]+://", ""))
+    | extend IOC = trim_end("/", replace_regex(tolower(ObservableValue), @"^[a-z]+://", ""))        // strip trailing "/", strip protocol and "://" string literal, convert to lower case
     | distinct IOC;
-// where any threat intel IOCs in DeviceNetworkEvents and DeviceEvents
+// where any threat intel IOCs in DeviceNetworkEvents or DeviceEvents
 union DeviceNetworkEvents, DeviceEvents
 | extend UrlNorm = trim_end("/", replace_regex(tolower(RemoteUrl), @"^[a-z]+://", ""))
-| where (UrlNorm in (ThreatIntelIOCs) and isnotempty(UrlNorm))
-    or (RemoteIP in~ (ThreatIntelIOCs) and isnotempty(RemoteIP))
+| where (UrlNorm in (ThreatIntelIOCs) and isnotempty(UrlNorm))                                      // is the UrlNorm (formatted RemoteUrl) an IOC in ThreatIntelIndicators?
+    or (RemoteIP in~ (ThreatIntelIOCs) and isnotempty(RemoteIP))                                    // or, is the RemoteIP an IOC in ThreatIntelIndicators? (case-insensitive for IPv6 characters)
+// Regex example
+// tolower(ObservableValue) -> "https://evil.example.com/"
+    // ObservableValue is the IOC from Defender ThreatIntelIndicators
+// replace_regex(@"^[a-z]+://", "") -> "evil.example.com/"
+    // where ^ is the beginning of the string
+    // [a-z] one or more letters (http, https, ftp, etc...)
+    // string literal "://"
+// trim_end("/") -> "evil.example.com"
