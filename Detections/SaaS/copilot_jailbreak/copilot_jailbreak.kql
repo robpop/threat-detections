@@ -1,0 +1,67 @@
+// Detect AI jailbreak and misuse, specifically targeting
+// MITRE ATLAS techniques:
+// AML.T0054     - LLM Jailbreak
+// AML.T0051.000 - LLM Prompt Injection: Direct
+// AML.T0051.001 - LLM Prompt Injection: Indirect
+// note: XPIA stands for Cross-Prompt Injection Attack
+CloudAppEvents
+| where ActionType == "CopilotInteraction"
+// select only the fields needed for the final results and detections
+| project
+    Timestamp,
+    Application,
+    AppHost = tostring(RawEventData.CopilotEventData.AppHost),
+    AppIdentity = tostring(RawEventData.AppIdentity),
+    UserUPN = tostring(RawEventData.UserId),
+    UserDisplayName = AccountDisplayName,
+    IPAddress,
+    Plugins = RawEventData.CopilotEventData.AISystemPlugin,
+    AccessedResources = RawEventData.CopilotEventData.AccessedResources,
+    ResourceEvents = RawEventData.CopilotEventData.AccessedResources,
+    Messages = RawEventData.CopilotEventData.Messages,
+    ConversationId = tostring(RawEventData.CopilotEventData.ConversationId),
+    GuardrailDetails = RawEventData.CopilotEventData.GuardrailDetails,
+    ReportId
+// process messages and resources together to reduce array expansion
+// check for jailbreaks, indirect prompt injection, and resource URLs
+| mv-apply Msg = Messages, Resource = ResourceEvents on (
+    summarize
+        JailbreakHits = countif(tobool(Msg.JailbreakDetected) == true),
+        JailbreakFlagsReported = countif(isnotnull(Msg.JailbreakDetected)),
+        XPIAHits = countif(tobool(Resource.XPIADetected) == true),
+        XPIAFlagsReported = countif(isnotnull(Resource.XPIADetected)),
+        ResourceURLs = make_set_if(
+            tostring(Resource.SiteUrl),
+            isnotempty(tostring(Resource.SiteUrl)))
+)
+| where JailbreakHits > 0 or XPIAHits > 0
+// distinguish detected attacks from missing detection telemetry
+// here, looking at if Microsoft's Copilot security telemetry included 
+// a jailbreak or cross-prompt injection detection result
+| extend
+    JailbreakDetected = case(
+        JailbreakHits > 0, "Yes",
+        JailbreakFlagsReported > 0, "No",       // confusing, but counts reported classification results, not jailbreaks 
+        "Not reported"),
+    PromptInjectionDetected = case(
+        XPIAHits > 0, "Yes",
+        XPIAFlagsReported > 0, "No",            // same here but for cross-prompt injection
+        "Not reported")
+// return only the requested columns
+| project
+    Timestamp,
+    Application,
+    AppHost,
+    AppIdentity,
+    UserUPN,
+    UserDisplayName,
+    IPAddress,
+    JailbreakDetected,
+    PromptInjectionDetected,
+    Plugins,
+    AccessedResources,
+    ResourceURLs,
+    ConversationId,
+    GuardrailDetails,
+    ReportId
+| order by Timestamp desc
